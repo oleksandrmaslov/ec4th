@@ -3,6 +3,9 @@
 This runs the Arduino Nano image on your machine, with a real Forth prompt on
 the simulated serial port. No board required.
 
+[SIMULATOR-DESIGN.md](SIMULATOR-DESIGN.md) covers how this was built and why it
+works the way it does; you do not need it to follow the steps below.
+
 ## 1. Install the prerequisites
 
 The cross build needs `gforth` and `avr-objcopy`; the simulator needs simavr's
@@ -16,6 +19,18 @@ sudo apt-get install gforth binutils-avr simavr libsimavr-dev gdb-avr
 `libsimavr-dev` is the one that is easy to miss. Installing plain `simavr` gives
 you the `simavr` command but no headers, and `make sim` will stop with a message
 telling you to install it.
+
+Check that everything landed:
+
+```bash
+gforth --version                 # gforth 0.7.3
+avr-objcopy --version | head -1  # GNU objcopy (GNU Binutils) 2.26...
+avr-gdb --version | head -1      # GNU gdb (GDB) 15.0...
+ls /usr/include/simavr/sim_avr.h # the libsimavr-dev header
+```
+
+The last one is the real test. `simavr` on its own installs the command but not
+the headers, and it is the headers that `make sim` needs.
 
 ## 2. Build and run
 

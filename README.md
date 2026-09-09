@@ -79,7 +79,8 @@ make sim
 `make debug` starts the same simulation halted at reset for `avr-gdb`.
 
 See [SIMULATOR.md](SIMULATOR.md) for the full walkthrough, including how to pipe
-a source file in and where breakpoints have to go in a threaded-code system.
+a source file in and where breakpoints have to go in a threaded-code system, and
+[SIMULATOR-DESIGN.md](SIMULATOR-DESIGN.md) for how that setup was built.
 
 ## Repository layout
 

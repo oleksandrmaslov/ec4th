@@ -135,11 +135,14 @@ which brings us to the next step.
 `0x11` is ASCII XON. Grepping the firmware for it:
 
 ```console
-$ grep -n 'XOFF\|throttle' +/ec4th/target/avr/usart-ringbuffer.fs
+$ grep -n 'XON\|XOFF' +/ec4th/target/avr/usart-ringbuffer.fs
 18:\ send XOFF already when 2 chars are in the buffer.
 69:    \ This sends XOFF after threshold is reached
+81:    temp0 throttle-threshold cpi, \ send XOFF once if at threshold
+83:    buffer-status buffer-status and, \ skip if XOFF was send before
 88:    temp1 $13 ldi, \ send XOFF and set flag
-122:    \ send XON, if transmit register is not empty then wait
+121:    \ send XON, if transmit register is not empty then wait
+122:    \ to make sure the to XON is sent
 ```
 
 The receive ISR implements **software flow control**: XOFF (`$13`) once two
@@ -326,7 +329,12 @@ returns *nothing* on a correctly installed system.
 
 ```console
 $ pkg-config --cflags simavr
+Package libelf was not found in the pkg-config search path.
+Perhaps you should add the directory containing `libelf.pc'
+to the PKG_CONFIG_PATH environment variable
 Package 'libelf', required by 'simavr', not found
+$ echo $?
+1
 ```
 
 `simavr.pc` declares `Requires.private: libelf`, but:
