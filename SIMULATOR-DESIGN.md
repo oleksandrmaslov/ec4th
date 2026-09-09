@@ -149,26 +149,41 @@ The receive ISR implements **software flow control**: XOFF (`$13`) once two
 characters are sitting in its ring buffer, XON (`$11`) when it has drained them.
 Those bytes were the firmware correctly telling the sender to wait.
 
-This is the most useful finding of the exercise. The README tells you to run
-`tio -b 115200 -o 1` on real hardware because ec4th drops characters when a file
-arrives faster than it compiles. That delay is a blunt workaround for having no
-flow control on the wire. The simulator *can* honour the signal exactly: watch
-for `$13`/`$11` in the output stream, hold the sender while XOFF stands, and
-swallow the two bytes so they do not appear on the console.
+The README tells you to run `tio -b 115200 -o 1` on real hardware because ec4th
+drops characters when a file arrives faster than it compiles. The simulator can
+do better than a blunt delay: watch for `$13`/`$11` in the output stream, hold
+the sender while XOFF stands, and swallow the two bytes so they never reach the
+console. That was implemented, and an eight-line test file pasted perfectly at
+full speed.
 
-The result is that pasting a source file is lossless at full speed, with no
-delay tuning at all:
+**That test file was too small.** A 26-line one overruns anyway:
 
 ```console
-$ { cat ../forth.fs; echo '77 11 and dup .BIN8-SHORT .'; } | ec4th-sim output/*.bin
-: .BIN8-SHORT ( n -- ) %-18b1498b ~5ms  compiled
-  8 0 DO %-8b1490b ~4ms  compiled
-  ...
-77 11 and dup .BIN8-SHORT . 000010019 ~7ms  ok
+$ ec4th-sim -d 0 output/*.bin < buzzer-hw.fs
+: d2-low %-14b1440b ~
+===> Input overrun, press Ctrl-C <===
 ```
 
-`-d <ms>` still exists to imitate a slow terminal deliberately, and `-X` shows
-the flow control bytes instead of acting on them.
+The ISR says why, in a comment right above the throttle code:
+
+```forth
+\ If the transmit register is busy, we don't send it and
+\ will send it when we receive the next char. This way,
+\ if there is concurrent output, we don't block in the ISR
+```
+
+XOFF only goes out when the transmitter happens to be idle — and while the board
+is echoing input and printing `%-6b1388b ~3ms compiled` after every line, it
+rarely is. Honouring XON/XOFF genuinely helps, but it cannot be relied on as the
+only mechanism.
+
+So redirected input is paced at 1 ms per character by default, the same trick as
+`tio -o 1`, while terminal input is left alone. The same file then compiles with
+no flags at all. `-d 0` restores full speed, and `-X` shows the flow control
+bytes instead of acting on them.
+
+The lesson is about the test, not the code: the first conclusion was not wrong
+in its mechanism, only over-generalised from a sample too small to falsify it.
 
 ## Step 7. Giving gdb something to work with
 

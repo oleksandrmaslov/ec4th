@@ -76,16 +76,25 @@ When stdin reaches end of file the simulator waits until the board has been
 quiet for 200 ms and then exits, so this works in scripts and test runs. Use
 `-q <ms>` if a definition needs longer to settle.
 
-### Why there is no `-o 1` here
+### Pacing, and why files still need it
 
-On real hardware the README tells you to run `tio -b 115200 -o 1`, because ec4th
-drops characters when a file arrives faster than it compiles. That delay is not
-needed under the simulator. `ec4th-sim` watches the XOFF (`$13`) and XON (`$11`)
-bytes that the receive ISR in `+/ec4th/target/avr/usart-ringbuffer.fs` sends
-when its ring buffer fills, and holds off the sender until ec4th asks for more.
-Files paste in losslessly at full speed. `-d <ms>` is still there if you want to
-reproduce a slow terminal deliberately, and `-X` shows the flow control bytes
-instead of acting on them.
+ec4th-sim honours the XOFF (`$13`) and XON (`$11`) bytes that the receive ISR in
+`+/ec4th/target/avr/usart-ringbuffer.fs` emits, and swallows them so they do not
+clutter the console. That alone is not enough. The ISR only manages to send XOFF
+when the transmit register happens to be free, and while it is echoing your
+input and printing compile results it usually is not — so the XOFF is skipped
+and the 90-byte ring buffer overflows:
+
+```
+: d2-low %-14b1440b ~
+===> Input overrun, press Ctrl-C <===
+```
+
+Redirected input is therefore paced at **1 ms per character by default**, which
+is the equivalent of `tio -o 1` on real hardware. Typing at a terminal is not
+paced, because no one types fast enough to matter. `-d <ms>` overrides it: `-d 0`
+pastes at full speed, which is fine for a few lines and not for a file. `-X`
+shows the flow control bytes instead of acting on them.
 
 ## 4. Debugging with avr-gdb
 

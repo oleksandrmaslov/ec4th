@@ -39,9 +39,9 @@ static const char usage_text[] =
 "\n"
 "  -m <mcu>   MCU type (default atmega328p)\n"
 "  -f <hz>    CPU frequency (default 16000000)\n"
-"  -d <ms>    extra delay between input characters, in simulated\n"
-"             milliseconds, like tio's -o option (default 0; ec4th's own\n"
-"             XON/XOFF is honoured, so this is rarely needed)\n"
+"  -d <ms>    delay between input characters, in simulated milliseconds,\n"
+"             like tio's -o option. Default 1 when stdin is redirected,\n"
+"             0 when it is a terminal. Pass -d 0 to paste at full speed.\n"
 "  -q <ms>    quiet time after stdin EOF before exiting (default 200)\n"
 "  -g[port]   start a gdb server and wait for avr-gdb (default port 1234)\n"
 "  -p         expose USART0 as a pty instead of using stdin/stdout\n"
@@ -221,7 +221,7 @@ main(int argc, char *argv[])
 	const char *mcu = "atmega328p";
 	const char *firmware = NULL;
 	uint32_t frequency = 16000000;
-	int char_delay_ms = 0;
+	int char_delay_ms = -1;		/* -1: not given, chosen from isatty() */
 	int quiet_ms = 200;
 	int gdb_port = 0;
 	int use_pty = 0;
@@ -326,6 +326,13 @@ main(int argc, char *argv[])
 			tcsetattr(STDIN_FILENO, TCSANOW, &raw);
 		}
 	}
+	/* A human types slowly enough; a redirected file does not. ec4th only
+	 * manages to send XOFF when its transmit register happens to be free,
+	 * which while echoing and printing compile results it usually is not, so
+	 * an unpaced file overruns its 90-byte ring buffer. This is the
+	 * equivalent of tio's -o 1 on real hardware. */
+	if (char_delay_ms < 0)
+		char_delay_ms = isatty(STDIN_FILENO) ? 0 : 1;
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
 
