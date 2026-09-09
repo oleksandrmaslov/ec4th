@@ -68,27 +68,25 @@ That produces:
 
 ## Simulator and debugging
 
-To run under `simavr`:
+The image runs on your machine under `simavr`, with a working Forth prompt on
+the simulated serial port:
 
 ```bash
-sudo apt-get install simavr
-./run.sh
+sudo apt-get install simavr libsimavr-dev gdb-avr
+make sim
 ```
 
-For GDB-based debugging:
+`make debug` starts the same simulation halted at reset for `avr-gdb`.
 
-```bash
-simavr -g -m atmega328p -f 16000000 output/ec4th-arduino-nano-regular.hex
-avr-gdb output/avr.elf -ex "target remote :1234" -ex 'display/i $pc'
-```
-
-Note: the current repository scripts generate HEX output directly. If you want a simulator or debugger flow that depends on ELF artifacts, check the commented conversion notes in `build.sh` first.
+See [SIMULATOR.md](SIMULATOR.md) for the full walkthrough, including how to pipe
+a source file in and where breakpoints have to go in a threaded-code system.
 
 ## Repository layout
 
 - `build.fs` builds the default Arduino Nano image.
 - `build.sh` runs the cross build and converts the generated binary into Intel HEX.
 - `run.sh` builds and starts the image in `simavr`.
+- `tools/sim/` holds the simavr front end, the ELF generator and the gdb helpers.
 - `+/ec4th/` contains the ec4th sources.
 - `doc/` contains documentation sources and the word metadata used to generate the reference.
 - `output/` is generated during builds and documentation generation.

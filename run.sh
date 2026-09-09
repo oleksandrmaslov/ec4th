@@ -1,5 +1,7 @@
 
 # build and run in sim
+#
+# Builds the firmware, builds the simavr front end and starts an interactive
+# Forth prompt on the simulated serial port. See SIMULATOR.md.
 
-bash build.sh
-simavr -m atmega328p -f 16000000 output/*.hex
+make sim
