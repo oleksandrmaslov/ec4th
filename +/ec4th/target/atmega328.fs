@@ -24,3 +24,4 @@ include avr/muldiv.fs
 include avr/arduino-library.fs
 include avr/f83search.fs
 include avr/parse-word.fs
+include avr/string-prims.fs

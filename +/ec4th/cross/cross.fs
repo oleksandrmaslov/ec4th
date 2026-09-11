@@ -2091,9 +2091,17 @@ variable ResolveFlag
 >CROSS
 \ Header states                                        12dec92py
 
+Variable NoHeaderFlag \ set by |, the next (THeader builds no target header
+NoHeaderFlag off
+Variable last-headerless \ the last (THeader built no target header
+last-headerless off
+
 \ : flag! ( 8b -- )   tlast @ dup >r T c@ xor r> c! H ;
 X has? f83headerstring bigendian or [IF] 0 [ELSE] tcell 1- [THEN] Constant flag+
-: flag! ( w -- ) 
+: flag! ( w -- )
+\G toggle flags in the count byte of the last header, a headerless
+\G definition has none, tlast still points to the word before it
+   last-headerless @ IF drop EXIT THEN
    tlast @ flag+ + dup >r T c@ xor r> c! H ;
 
 VARIABLE ^imm
@@ -2198,7 +2206,11 @@ Create tag-dquot 1 c,  22 c,
 
 \ Check for words
 
-Defer skip? ' false IS skip?
+Defer (skip?) ' false IS (skip?)
+
+: skip? ( "name" -- flag )
+\G true if the definition of name is skipped, a | in front of it is void then
+  (skip?) dup IF  NoHeaderFlag off  THEN ;
 
 : skipdef ( "name" -- )
 \G skip definition of an undefined word in undef-words and
@@ -2238,9 +2250,6 @@ Defer skip? ' false IS skip?
     BEGIN  refill  WHILE  source -trailing nip 0= UNTIL  THEN ;
 
 \ Target header creation
-
-Variable NoHeaderFlag
-NoHeaderFlag off
 
 : 0.r ( n1 n2 -- ) 
     base @ >r hex 
@@ -2289,8 +2298,8 @@ Create hash-links here 1 hash-bits lshift cells dup allot erase
     \  >in @ bl word count type 2 spaces >in !
     \ wordheaders will always be compiled to rom
     switchrom
-    \ build header in target
-    NoHeaderFlag @
+    \ build header in target, unless | asked for a headerless definition
+    NoHeaderFlag @ dup last-headerless !
     IF  NoHeaderFlag off
     ELSE
 	T align H view,
@@ -2345,7 +2354,10 @@ Variable aprim-nr -20 aprim-nr !
   >in @ skip? IF  2drop  EXIT  THEN  >in !
   (THeader ( S xt ghost )
   2dup swap xt>ghost swap copy-execution-semantics
-  over resolve T A, H alias-mask flag! ;
+  over resolve
+  \ the xt cell is only read by name>xt, a headerless alias does not need it
+  last-headerless @ IF  drop EXIT  THEN
+  T A, H alias-mask flag! ;
 
 Variable last-prim-ghost
 0 last-prim-ghost !
@@ -3806,8 +3818,10 @@ bigendian Constant bigendian
 : warnings name 3 = 
   IF twarnings off warnings off ELSE twarnings on warnings on THEN drop ;
 
-: | ;
-\ : | NoHeaderFlag on ; \ This is broken (damages the last word)
+: | ( -- )
+\G the next definition gets no target header: it can not be found by name
+\G on the target, but it is still in the ghosts and the symbol table
+  NoHeaderFlag on ;
 
 : save-cross save-cross ;
 : save-region save-region ;
@@ -3849,9 +3863,9 @@ previous
 : . . ;
 : erase bounds ?do 0 I X c! loop ;
 
-: all-words    ['] forced?    IS skip? ;
-: needed-words ['] needed?  IS skip? ;
-: undef-words  ['] defined2? IS skip? ;
+: all-words    ['] forced?    IS (skip?) ;
+: needed-words ['] needed?  IS (skip?) ;
+: undef-words  ['] defined2? IS (skip?) ;
 : skipdef skipdef ;
 
 : \  postpone \ ;  immediate

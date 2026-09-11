@@ -8,40 +8,12 @@
  \G compiling. 
  0 state !
 
-\ the pointer to the current dictionary pointer
-Variable dp	
+\ dp here allot unused c, , align are in dictionary.fs
 
 Variable current
-Variable last
+Variable last    \ link field of the header under construction, 0 after reveal
+Variable lastnt  \ name token of the most recently revealed header
 Variable lastcfa
-
-: here dp @ ;
-
-\ we default to this version if we have nothing else 05May99jaw
-\ check dictionary region 10mar26jaw
-: allot ( n -- ) \ core
-\G Reserve @i{n} address units of data space without
-\G initialization. @i{n} is a signed number, passing a negative
-\G @i{n} releases memory.
-    here +
-    dup 1- [ unlock ram-dictionary borders lock ] literal literal  within -8 and throw
-    dp ! ;
-
-: c,    ( c -- ) \ core c-comma
-\G Reserve data space for one char and store @i{c} in the space.
-    here 1 chars allot c! ;
-
-: ,     ( w -- ) \ core comma
-\G Reserve data space for one cell and store @i{w} in the space.
-    here cell allot ! ;
-
-\ defined in primitives/memory.fs
-\ : aligned ( addr -- addr' ) \ core
-\    [ cell 1- ] Literal + [ -1 cells ] Literal and ;
-
-: align ( -- ) \ core
-\G If the data-space pointer is not aligned, reserve enough space to align it.
-    here dup aligned swap ?DO  bl c,  LOOP ;
 
 \G GForth EC / ec4th switch that the next defining word data goes to ROM
 ' noop ALIAS const
@@ -85,8 +57,10 @@ Variable lastcfa
     ' postpone Literal ; immediate restrict
 
 : postpone ( "name" -- ) \ core
-\g Compiles the compilation semantics of @i{name}.
-    (') name>xt compile, ; immediate restrict
+\g Compiles the compilation semantics of @i{name}: an immediate word is
+\g compiled, for any other word code is compiled that compiles it.
+    (') name>xt immediate-mask and
+    IF compile, ELSE postpone Literal ['] compile, compile, THEN ; immediate restrict
 
 \ \ compiler loop
 
@@ -123,12 +97,14 @@ Variable lastcfa
 \ scan and parse is needed here by the compiler, so keep the definition
 \ here, although it is related to the parsing
 
+[IFUNDEF] scan
 : scan   ( addr1 n1 char -- addr2 n2 )
 \G Skip all characters not equal to char
 \G Compatibility GForth, F83
    >r 
    BEGIN dup WHILE over c@ r@ <> WHILE 1 /string
    REPEAT THEN rdrop ;
+[THEN]
 
 : parse ( delim -- c-addr len )
 \ Return the next string from the input buffer delimited by delim.
@@ -194,8 +170,11 @@ Variable lastcfa
 : ctoggle ( bmask c-addr -- )
     tuck c@ xor swap c! ; 
 
-: ?last-cset
-  last @ ?dup IF swap cset THEN ;
+: ?last-cset ( bmask -- )
+\G Set bmask in the count byte of the header under construction, or of
+\G the most recently revealed one, so : foo ; immediate works
+  last @ ?dup IF cell+ ELSE lastnt @ THEN
+  ?dup IF cset ELSE drop THEN ;
 
 : immediate ( -- ) \ core
     \G Make the compilation semantics of a word be to @code{execute}
@@ -216,6 +195,10 @@ Variable lastcfa
 
 : header ( "name" -- )
     parse-word name-too-short? name-too-long?
+    \ header, code field and two body cells must fit, so Create, Variable,
+    \ Constant and Alias can not run out of space after the word is revealed:
+    \ align 1, link 2, count 1, name, align 1, cfa 4, body 4
+    dup 13 + unused u> -8 and throw
     \ on 8 bit systems there is no real need for alignment
     \ however, its good practise to have it cell aligned, sinc
     \ otherwise dumps are very confusing ;jw
@@ -226,7 +209,8 @@ Variable lastcfa
 \ Create Variable User Constant                        	17mar93py
 
 : Alias    ( xt "name" -- ) \ gforth
-    Header reveal alias-mask ?last-cset , ;
+    \ name>xt expects the xt in the cell aligned after the name
+    Header align , alias-mask ?last-cset reveal ;
 
 0 Constant defstart
 
@@ -246,7 +230,7 @@ Variable lastcfa
     Header colon-cf, ;
 
 : :noname ( -- xt colon-sys ) \ core-ext	colon-no-name
-    0 last ! colon-cf, ;
+    0 last ! colon-cf, lastcfa @ swap ;
 
 : check-shadow  ( addr count wid -- )
 \G prints a warning if the string is already present in the wordlist
@@ -264,7 +248,7 @@ Variable lastcfa
 : reveal ( -- ) \ gforth
     last @ ?dup
     IF \ the last word has a header
-        dup cell+ dup name>string current @ check-shadow
+        dup cell+ dup lastnt ! dup name>string current @ check-shadow
         current-bucket ! 
         last off
     THEN ;
@@ -323,3 +307,11 @@ doer? :docon [IF]
 : 2Constant ( w1 w2 "name" -- ) \ double two-constant
     Create ( w1 w2 "name" -- ) 2,
     DOES> 2@ ( -- w1 w2 ) ;
+
+: DOES> ( compilation colon-sys -- colon-sys ; run-time nest-sys -- ) \ core does
+\G Compiles the same layout as the cross compiler's DOES>, so (does>2)
+\G and :dodoes serve both: lit <handler> (does>2) ;s :doesjump 0 <does-code>
+    dup ?struc \ colon-sys of : is 0, anything else is an open IF/BEGIN/DO
+    here [ 4 cells ] literal + postpone Literal
+    postpone (does>2) postpone ;s
+    ['] :doesjump , 0 , ; immediate restrict

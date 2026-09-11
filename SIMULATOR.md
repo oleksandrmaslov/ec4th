@@ -76,25 +76,29 @@ When stdin reaches end of file the simulator waits until the board has been
 quiet for 200 ms and then exits, so this works in scripts and test runs. Use
 `-q <ms>` if a definition needs longer to settle.
 
-### Pacing, and why files still need it
+### Pacing and flow control
 
 ec4th-sim honours the XOFF (`$13`) and XON (`$11`) bytes that the receive ISR in
 `+/ec4th/target/avr/usart-ringbuffer.fs` emits, and swallows them so they do not
-clutter the console. That alone is not enough. The ISR only manages to send XOFF
-when the transmit register happens to be free, and while it is echoing your
-input and printing compile results it usually is not — so the XOFF is skipped
-and the 90-byte ring buffer overflows:
+clutter the console. The ISR sends XOFF once two characters are waiting in its
+144-byte ring buffer, and tries again with every further character while the
+transmit register is busy; `key` sends XON when the buffer is drained. A whole
+file can therefore be pasted at full speed with `-d 0`, even when one of its
+lines runs a word for a long time.
+
+Redirected input is still paced at **1 ms per character by default**, the
+equivalent of `tio -o 1` on real hardware. Typing at a terminal is not paced.
+`-d <ms>` overrides it. `-X` shows the flow control bytes instead of acting on
+them; without flow control a long running word followed by more pasted lines
+overflows the ring buffer:
 
 ```
-: d2-low %-14b1440b ~
 ===> Input overrun, press Ctrl-C <===
 ```
 
-Redirected input is therefore paced at **1 ms per character by default**, which
-is the equivalent of `tio -o 1` on real hardware. Typing at a terminal is not
-paced, because no one types fast enough to matter. `-d <ms>` overrides it: `-d 0`
-pastes at full speed, which is fine for a few lines and not for a file. `-X`
-shows the flow control bytes instead of acting on them.
+While more input is already waiting, ec4th holds back the
+`%-<bytes>b<unused>b ~<ms>ms` status after each line and prints the totals of
+the whole pasted block once, after its last line.
 
 ## 4. Debugging with avr-gdb
 

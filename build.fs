@@ -24,7 +24,9 @@ $8000 $8000 region rom-dictionary
 lock e? stack-grows-upwards unlock
 [IF]
 
-ram-dictionary $60 steal-from-end region return-stack
+\ both stacks share this region. The stack checks in ?stack and :docol keep
+\ 62 and 24 bytes free, $A0 leaves room for about 40 data stack items
+ram-dictionary $A0 steal-from-end region return-stack
 
 [ELSE]
 
@@ -59,6 +61,7 @@ include +/ec4th/nio/dothex.fs
 include +/ec4th/debug/dump.fs
 
 include +/ec4th/kernel/hashed-search.fs
+include +/ec4th/kernel/dictionary.fs
 include +/ec4th/kernel/compiler.fs
 include +/ec4th/kernel/interpreter.fs
 include +/ec4th/kernel/flow-control.fs
@@ -115,7 +118,7 @@ include +/ec4th/boot/mirror.fs
     quit-error
   ELSE 
     mirrorram
-    ." ec4th" quit
+    cr ." ec4th" quit
   THEN
   bye ;
 

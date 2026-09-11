@@ -56,6 +56,8 @@ Create forth-wordlist here 1 hash-bits lshift cells dup allot erase
   dictionary-hash [ 1 hash-bits lshift 1- ] literal and ;
 
 : find-name-in ( c-addr u wid -- nt | 0 ) 
+  \ no name is longer than 31 chars, and the copy at HERE must stay in the pad
+  over lcount-mask u> IF drop 2drop 0 EXIT THEN
   >r tolower 2dup hash-bucket cells r> + @ f83search ;
 
 [THEN]

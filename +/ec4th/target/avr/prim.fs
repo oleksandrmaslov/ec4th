@@ -4,6 +4,28 @@ decimal
 
 
 
+start-macros
+\ Jump to the code of the word W points to, l is a free local label number.
+\ ROM words (the whole kernel) fall through and save a cycle, words defined
+\ at the prompt take the branch
+: dispatch, ( l -- )
+	ZL WL movw,
+	?rom-address-cp,
+	dup $ brcc,
+	zh-mask-rom-address,
+	temp0 lpmZ+, temp1 lpmZ+,
+	ZL temp0 movw,
+	zh-mask-rom-address,    \ Remove high bit marking the rom address
+	ZH lsr, ZL ror, \ TODO make doer word addressed to save shifts?
+	ijmp,
+	$:
+	temp0 ldZ+, temp1 ldZ+,
+	ZL temp0 movw,
+	zh-mask-rom-address,
+	ZH lsr, ZL ror,
+	ijmp, ;
+end-macros
+
 Label into-forth
 	'f pout
 	$0d pout
@@ -65,35 +87,49 @@ Label do_next
 	?rom-address-xh-cp, 
 	0 $ brcs,
 	WL ldx+, WH ldx+, \ X is IP, advance and fetch next instruction from RAM
-	1 $ rjmp,
+	\ a copy of the dispatch instead of a jump to it saves 2 cycles
+	3 dispatch,
 0 $:
 	zl xl movw,
 	IPL 2 adiw,
 	zh-mask-rom-address,     \ Remove high bit marking the rom address
 	WL lpmZ+, WH lpmZ+,
 Label do_next2
-1 $:
-	ZL WL movw,
-	?rom-address-cp, 
-	2 $ brcs,
-	temp0 ldZ+, temp1 ldZ+,
-	ZL temp0 movw,
-	zh-mask-rom-address,    \ Remove high bit marking the rom address
-	ZH lsr, ZL ror, \ TODO make doer word addressed to save shifts?
-	ijmp,
-2 $:
-	zh-mask-rom-address,
-	temp0 lpmZ+, temp1 lpmZ+,
-	ZL temp0 movw,
-	zh-mask-rom-address,    \ Remove high bit marking the rom address
-	ZH lsr, ZL ror, \ TODO make doer word addressed to save shifts?
-	ijmp,
+	2 dispatch,
+end-label+
+
+\ Stack overflow found by the check in :docol. Both stacks share one region:
+\ report -3 if the data stack uses more of it than the return stack, else -5.
+\ on-error resets both stacks and restarts the interpreter with that code.
+Label stack-overflow
+	ZL SPL in/lds,
+	ZH SPH in/lds,
+	ZL YL add,
+	ZH YH adc,
+	ZL data-stack-init return-stack-init + lowbyte subi,
+	ZH data-stack-init return-stack-init + highbyte sbci,
+	tosl -5 255 and ldi,
+	tosh 255 ldi,
+	5 $ brcs,
+	tosl -3 255 and ldi,
+5 $:
+	on-error rjmp,
 end-label+
 
 Code: :docol
 \ start a colon defined forth word
 	': pout
 	IPH push, IPL push,
+	\ stack check, SP - Y is the free space between the stacks. The margin
+	\ covers an interrupt frame (7 bytes) and pushes by primitives until the
+	\ next check. subi/sbci because the assembler encodes sbiw K >= 16 wrong
+	ZL SPL in/lds,
+	ZH SPH in/lds,
+	ZL 24 subi,
+	ZH 0 sbci,
+	ZL YL cp,
+	ZH YH cpc,
+	stack-overflow brcs,
 	IPL WL movw,
 	IPL 4 adiw, 
 	do_next rjmp,
@@ -140,6 +176,7 @@ Code: :dodoes
 	zh-mask-rom-address,
 	IPL lpmZ+, IPH lpmZ+,
 	tosl ZL movw,
+	tosh-pm-forth, \ Z was masked, the body of a ROM child keeps its ROM bit
 	do_next rjmp,
 	0 $:
 	IPL ldZ+, IPH ldZ+,
@@ -319,7 +356,17 @@ stack-grows-upwards [IF]
 	do_next rjmp,
 End-Code+
 
-\ TODO: todigit
+Code todigit ( u -- c )
+\G Character of the digit u: 0..9 give '0'..'9', 10..35 give 'A'..'Z'.
+\G Same as : todigit 9 over < 7 and + [char] 0 + ; (signed compare)
+	tosl 10 cpi,
+	tosh zero cpc,
+	0 $ brlt,
+	tosl 7 adiw,
+0 $:
+	tosl 48 adiw,
+	do_next rjmp,
+End-Code+
 
 Code rot ( n1 n2 n3 -- n2 n3 n1 )
 \ needs two scratch registers, e.g. temp0 temp1
@@ -465,6 +512,61 @@ Code u< ( u1 u2 -- f )
 End-Code+
 
 \ ##############################################################################
+\ ################################## Shifts ####################################
+\ ##############################################################################
+
+Code rshift ( u1 n -- u2 )
+\G Logical shift right by n bits. Gives 0 for every n >= 16, as the colon
+\G loop did. n >= 8 moves a whole byte first, then at most 7 single shifts
+	temp0 tosl movw,
+	loadtos
+	temp1 tst,
+	press-false brne,	\ n >= 256
+	temp0 8 cpi,
+	1 $ brlo,
+	tosl tosh mov,
+	tosh clr,
+	temp0 8 subi,
+	temp0 8 cpi,
+	press-false brsh,	\ n >= 16
+1 $:
+	temp0 tst,
+	3 $ breq,
+2 $:
+	tosh lsr, tosl ror,
+	temp0 dec,
+	2 $ brne,
+3 $:
+	do_next rjmp,
+End-Code+
+
+Code lshift ( u1 n -- u2 )
+\G Shift left by n bits. Gives 0 for every n >= 16, as the colon loop did
+	temp0 tosl movw,
+	loadtos
+	temp1 tst,
+	4 $ brne,	\ n >= 256
+	temp0 8 cpi,
+	1 $ brlo,
+	tosh tosl mov,
+	tosl clr,
+	temp0 8 subi,
+	temp0 8 cpi,
+	4 $ brsh,	\ n >= 16
+1 $:
+	temp0 tst,
+	3 $ breq,
+2 $:
+	tosl lsl, tosh rol,
+	temp0 dec,
+	2 $ brne,
+3 $:
+	do_next rjmp,
+4 $:
+	press-false rjmp,
+End-Code+
+
+\ ##############################################################################
 \ ############################# Return Stack ###################################
 \ ##############################################################################
 
@@ -581,6 +683,18 @@ stack-grows-upwards [IF]
 	do_next rjmp,
 End-Code+
 
+e? stack-grows-upwards [IF]
+Code sp! ( addr -- )
+\G Set the data stack pointer, sp@ returns addr afterwards. A primitive,
+\G because the colon version in catch-throw.fs refills a deep underflow
+\G with zeros, which wipes the RAM dictionary below the stacks
+	YL tosl movw,
+	tosl 0 lddY,
+	tosh 1 lddY,
+	do_next rjmp,
+End-Code+
+[THEN]
+
 \ ##############################################################################
 \ ############################ Bit twiddling ###################################
 \ ##############################################################################
@@ -669,6 +783,14 @@ End-Code+
 Code bye ( -- ) 
 	cli,
 	sleep,
+End-Code+
+
+\ restart Forth as after power up: stacks, the RAM dictionary image (HERE,
+\ the word list, BASE, STATE ...) and the banner. The USART, timer0 and
+\ input already waiting in the ring buffer are kept.
+Code cold ( -- )
+	cli,
+	into-forth rjmp,
 End-Code+
 
 

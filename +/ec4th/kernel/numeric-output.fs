@@ -26,7 +26,7 @@
 : u. ( u -- )
 \G Only uses stack for the output and does not rely on available dictionary space
 \G as pictured numeric output would do.
-    base @ u.x ;
+    base @ u.x space ;
 
 : . ( n -- )
 \G Only uses stack for the output and does not rely on available dictionary space

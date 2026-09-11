@@ -3,5 +3,5 @@ wordset: core
 also-wordsets:
   - exception-ext
 f12-slug: ABORTq
-stack: '( "ccc<quote>" -- )'
+stack: '( "ccc<quote>" -- ) run-time: ( i*x x1 -- | i*x )'
 description: 'If the flag is false, continue. If it is true, print the message and abort.'

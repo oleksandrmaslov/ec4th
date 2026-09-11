@@ -1,18 +1,7 @@
 todo:
-- detect stack overflow and underflow
-- DOES> in compiler
-- speed: flip ram/rom mapping to get rid of pm masking?
-- only print millis and unused when not more input is coming?
-- cross compiled 2constant is not working
-- have boot as command / means to reset forth completely
-- fix abort", no flag in standard
-- character parsing, according to standard: 'c'
-- detect when dictionary is full, reorg dictionary code
-- abort" does not take flag, have ?abort", https://forth-standard.org/standard/exception/ABORTq
-- Make no header flag work / use Alias instead of defer
-- speed: check .h / implement lshift / rshift
-- speed: have false, true and 0 as word / primitive
-- speed: skip, scan, tolower in assembler to speed up interpreter/compiler
-- should we integrate tolower in parse-word?
-- speed: improve donext by one cycle with a macro
-- speed: todigit in assembler
+- stack overflow: :docol only checks at colon calls, pushes by primitives between two calls are not caught (e.g. a word with 20 literals near a full stack, loops without calls). Checking taken branches too costs ~11% on loops
+- speed: doers as word addresses would drop "andi, lsr, ror" (3 cycles) from every dispatch. Needs the cross compiler to put native code addresses into code fields (primitives, doers, dodoes, builders) and the target compiler (colon-cf, Create, Constant, (does>2)) to store them
+- speed: inline NEXT into the hottest primitives (lit ;s (loop) branch), saves the rjmp (2 cycles) per execution for ~50 bytes each
+- speed: flip ram/rom mapping? probably not: with ROM at 0 the I/O register constants must move into the translated RAM window, and every RAM and I/O access (@ ! c@ c! lit do_next doers mirrorram cmove dump, gdb tools) needs a translation, while only ROM paths save one andi
+- speed: number conversion is colon code (snumber? of 12345 takes ~1.5 ms): digit, upc, (>number)
+- speed: true false 0 as primitives save ~10 cycles per use (bench true-false-0 is 49 ms for 9000 uses); 0 must stay host executable for 0 [IF] in the cross compiler

@@ -50,9 +50,10 @@ User "error
 \G just writes the code or the counted string from "error
 \G https://forth-standard.org/standard/exception
 \G Courtesy to Heinz Schnitter we print KO for an error
+\G -1 (ABORT) prints nothing, see 9.6.1.2275 THROW
   dup -2 = 
   IF 	  "error @ ?dup IF count type THEN drop
-  ELSE	." KO#" &10 ( n base ) .x
+  ELSE	dup 1+ IF ." KO#" &10 ( n base ) .x ELSE drop THEN
   THEN ;
 
 \ straight forward implementation also described in the standard"

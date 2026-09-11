@@ -3,30 +3,21 @@
 UNDEF-WORDS
 decimal
 
-\ size of the pictured numeric output string buffer, in characters
-\ https://forth-standard.org/standard/usage#usage:env
-32 Constant /hold
-
-\ size of the scratch area pointed to by PAD, in characters, 
-\ according to standard at least 84 
-\ https://forth-standard.org/standard/usage#usage:env
-84 Constant /pad
+\ /hold /pad and dictionary-end-address are defined in dictionary.fs
 
 Variable hld
-
-unlock ram-dictionary borders nip lock
-Constant dictionary-end-address
 
 : pad ( -- c-addr )
 \G @var{c-addr} is the address of a transient region that can be
 \G used as temporary data storage. At least 84 characters of space
 \G is available. The actual space can be determined by /pad
-    here /hold + dup /pad + dictionary-end-address u> -&8 and throw ;
+\G allot keeps /hold and /pad free above here, so no check is needed
+    here /hold + ;
 
-\ : todigit ( u -- c ) 
+\ : todigit ( u -- c )
 \    9 over < 7 and + [char] 0 + ;
 
-: <# ( -- ) 
+: <# ( -- )
 \G Initialise/clear the pictured numeric output string.
   pad hld ! ;
 
@@ -35,7 +26,7 @@ Constant dictionary-end-address
 \G @var{char} to the pictured numeric output string.
     hld @ char- dup here u< -&17 and throw tuck c! hld ! ;
 
-: # ( d -- d ) 
+: # ( d -- d )
 \G Used within @code{<#} and @code{#>}. Add the next
 \G least-significant digit to the pictured numeric output
 \G string. This is achieved by dividing @var{ud1} by the number in
@@ -46,24 +37,24 @@ Constant dictionary-end-address
 \G to the string.
   base @ ud/mod rot todigit hold ;
 
-: #s ( d -- d ) 
+: #s ( d -- d )
 \G Used within @code{<#} and @code{#>}. Convert all remaining digits
 \G using the same algorithm as for @code{#}. @code{#s} will convert
 \G at least one digit. Therefore, if @var{ud} is 0, @code{#s} will append
 \G a ``0'' to the pictured numeric output string.
    BEGIN # 2dup or 0= UNTIL ;
 
-: #> ( d -- a u ) 
+: #> ( d -- a u )
 \G Complete the pictured numeric output string by discarding
 \G @var{xd} and returning @var{addr u}; the address and length of
 \G the formatted string. A Standard program may modify characters
 \G within the string.
    2drop hld @ pad over - ;
 
-: sign ( n -- ) 
+: sign ( n -- )
     0< IF [char] - hold THEN ;
 
-: d. ( d -- ) 
+: d. ( d -- )
     dup -rot dabs <# #s rot sign #> type space ;
 
 : . ( n -- )

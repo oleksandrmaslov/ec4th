@@ -78,10 +78,10 @@ Label uart-rx-isr
     temp0 0 buffer-size - $ff and subi,
     1 $:
 
-    temp0 throttle-threshold cpi, \ send XOFF once if at threshold
-    2 $ brcc,
+    temp0 throttle-threshold cpi, \ send XOFF once the threshold is reached
+    2 $ brlo,
     buffer-status buffer-status and, \ skip if XOFF was send before
-    2 $ breq,
+    2 $ brne,
     temp1 UCSR0A in/lds, \ skip if output register is busy
     temp1 5 sbrs,
     2 $ rjmp,
@@ -122,6 +122,8 @@ label receive-char
     \ to make sure the to XON is sent
     read-offset write-offset cp,
     2 $ brne,
+    buffer-status buffer-status and, \ XON only after an XOFF
+    2 $ breq,
     temp1 push,
     temp1 $11 ldi,
     transmit rcall,

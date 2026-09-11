@@ -10,8 +10,10 @@
 
 DECIMAL
 
- : todigit ( u -- c ) 
+[IFUNDEF] todigit
+ : todigit ( u -- c )
   9 over < 7 and + [char] 0 + ;
+[THEN]
 
 : .hdigit ( n -- )
 \G Print a hex digit (10 becomes A, and so on)

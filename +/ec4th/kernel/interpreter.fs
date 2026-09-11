@@ -56,7 +56,7 @@ decimal
 : tolower ( c-addr1 len -- c-addr2 len )
 \ convert search string to lower case once and put it to here
 
-    tuck here dup >r -rot bounds DO I c@ lwc over c! char+ LOOP drop r> swap ;
+    here (tolower) ;
 
 : comparedict ( adr1 len1 adr2 len2 -- flag )
   rot over <> IF 2drop drop false EXIT THEN
@@ -191,13 +191,14 @@ decimal
 \   >r >r 0 0 r> r> >number 2drop drop ;
 
 hex
-const Create bases   10 ,   2 ,   A , 100 ,
-\                     16     2    10   character
+const Create bases   10 ,   2 ,   A ,
+\                     16     2    10
+\ character literals 'c' are handled in snumber?
 
 \ FIXME: !! protect BASE saving wrapper against exceptions
 \ FIXME: change s>number? impl to save base internally
 : getbase ( addr u -- addr' u' )
-    over c@ [char] $ - dup 4 u<
+    over c@ [char] $ - dup 3 u<
     IF
         cells bases + @ base ! 1 /string
     ELSE
@@ -238,6 +239,11 @@ const Create bases   10 ,   2 ,   A , 100 ,
     THEN ;
 
 : snumber? ( c-addr u -- 0 / n -1 / d 0> )
+    \ Forth-2012 3.4.1.3 character literal <cnum> := '<char>'
+    dup 3 = IF
+        over count [char] ' = swap char+ c@ [char] ' = and
+        IF drop char+ c@ true EXIT THEN
+    THEN
     s>number? 0=
     IF
         2drop false  EXIT
@@ -276,6 +282,10 @@ const Create bases   10 ,   2 ,   A , 100 ,
 : ?stack ( ?? -- ?? ) \ gforth
     [ e? stack-grows-upwards [IF] ]
         sp@ sp0 @ u< IF sp0 @ sp! -4 throw  THEN
+        \ overflow: both stacks share one region and the next word may take
+        \ up to 52 bytes (measured: number conversion, .s, 2constant) plus 9
+        \ for an interrupt frame and pushes inside primitives
+        stack-space &62 < IF sp0 @ sp! -3 throw  THEN
     [ [ELSE] ]
         sp@ sp0 @ u> IF sp0 @ sp! -4 throw  THEN
     [ [THEN] ]
@@ -297,32 +307,25 @@ require parse-word.fs
         [ [THEN] ]
     REPEAT 2drop ;  
 
-\ FIXME move to dictionary / compiler
-: unused ( -- u ) \ core-ext
-\G Return the amount of free space remaining (in address units) in
-\G the region addressed by @code{here}.
-\ https://forth-standard.org/standard/core/UNUSED
-     dictionary-end-address /pad - /hold - here - ;
-
 \ Allow quit-interpret to be redefined with other useful things
 [IFUNDEF] quit-interpret
 
 : .elapsed ( u -- ) 
     '~ emit 10 u.x ." ms " ;
 
-\ FIXME move to dictionary / compiler
-: unused ( -- u ) \ core-ext
-\G Return the amount of free space remaining (in address units) in
-\G the region addressed by @code{here}.
-\ https://forth-standard.org/standard/core/UNUSED
-     dictionary-end-address /pad - /hold - here - ;
-
 : .eaten ( u -- ) 
     ?dup IF '% emit '- emit 10 u.x 'b emit unused 10 u.x 'b emit space THEN ;
 
+| Variable burst-here \ HERE when the current input burst started, 0 when idle
+| Variable burst-ms   \ millis when the current input burst started
+
 : quit-interpret
 \G Decorated interpret when called within quit. Adds timing display.
-    millis >r here >r interpret here r> - .eaten millis r> - .elapsed ;
+\G While more input is already waiting the display is held back, so a
+\G pasted block reports its totals once, after its last line.
+    burst-here @ 0= IF here burst-here ! millis burst-ms ! THEN
+    interpret key? IF EXIT THEN
+    here burst-here @ - .eaten millis burst-ms @ - .elapsed burst-here off ;
 
 [THEN]
 
@@ -345,6 +348,10 @@ require parse-word.fs
     \ rp by convention points
     [ unlock return-stack borders nip lock cell - ] literal rp!
     handler off [ defined? state [IF] ] state off [ [THEN] ]
+    \ a header that was never revealed means an error aborted the
+    \ definition, give its header and code back
+    last @ ?dup IF dp ! last off THEN
+    [ defined? burst-here [IF] ] burst-here off [ [THEN] ]
     \ exits only through THROW etc.
     BEGIN
         [ defined? state  [IF] ] 

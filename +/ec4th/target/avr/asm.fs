@@ -549,7 +549,8 @@ all-models
   2 pick 24 - 2 /mod 0 3 check-register-special
   1 = abort" Wrong register value"
   rot 24 - 2/ 4 lshift or \ k opc
-  over 48 and 4 lshift or
+  \ K5:K4 go to bits 7:6, above the register bits 5:4
+  over 48 and 2 lshift or
   swap 15 and or
   opc, ;
 ' opcode-pattern-????????KKDDKKKK to op-xt
